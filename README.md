@@ -46,6 +46,10 @@ plt.rcParams['image.cmap'] = 'gray'
 np.random.seed(123)
 ```
 
+    /anaconda3/lib/python3.6/site-packages/h5py/__init__.py:36: FutureWarning: Conversion of the second argument of issubdtype from `float` to `np.floating` is deprecated. In future, it will be treated as `np.float64 == np.dtype(float).type`.
+      from ._conv import register_converters as _register_converters
+
+
 ## Initialization in an L-layer Neural Network
 
 Let's look at the initialization function you created in the previous lab. We'll try to convert this helper function to a function that can be used in a setting with $L$ layers.
@@ -97,13 +101,18 @@ $$b^{[l]}: (n^{[l]}, 1)$$
 #create a dictionary of parameters for W and b given a list of layer dimensions.
 #Simply randomly initialize values in accordance to the shape each parameter should have.
 #Use random seed 123 (as provided)
-def initialize_parameters_deep(list_layer_dimensions):
+def initialize_parameters_deep(n_0, n_1, n_2):
+    np.random.seed(123) 
+    W1 = np.random.randn(n_1, n_0) * 0.05 
+    b1 = np.zeros((n_1, 1))
+    W2 =  np.random.randn(n_2, n_1) * 0.05 
+    b2 = np.zeros((n_2, 1))
     
-    np.random.seed(123)
-    parameters = {}
+    parameters = {"W1": W1,
+                  "b1": b1,
+                  "W2": W2,
+                  "b2": b2}
     
-    #Your code here
-        
     return parameters
 ```
 
@@ -127,16 +136,16 @@ The output of this function will be the activation A. Additionally, we save some
 #Be sure to also carefully review the function in general in order to continue building your understanding.
 def linear_activation_forward(A_prev, W, b, activation):
  
-    Z = #Your code here; see the linear transformation above for how to compute Z
+    Z = np.dot(W, A_prev) + b #Your code here; see the linear transformation above for how to compute Z
     linear_cache = (A_prev, W, b)
     activation_cache = Z
     
     #Here we define two possible activation functions
     if activation == "sigmoid":
-        A = #Your code here; use the appropriate function for a sigmoid activation function
+        A = 1/(1+np.exp(-Z)) #Your code here; use the appropriate function for a sigmoid activation function
     
     elif activation == "relu":
-        A = #Your code here; use the appropriate function for the ReLU activation function.
+        A = np.maximum(0,Z) #Your code here; use the appropriate function for the ReLU activation function.
     
     assert (A.shape == (W.shape[0], A_prev.shape[1]))
     cache = (linear_cache, activation_cache)
@@ -160,15 +169,23 @@ Make sure to keep track of the caches in the "caches" list. To add a new value `
 #Once again, complete this templated function as indicated by the comments provided.
 def L_model_forward(X, parameters):
     #Initialize a cache list to keep track of the caches
-    #Your code here
+    caches = [] #Your code here
     A = X
     L = len(parameters) // 2 # number of layers in the neural network
     
     # Implement the RELU activation L-1 times. Add "cache" to the "caches" list.
     #Your code here
+    for l in range(1, L):
+        A_prev = A
+        A, cache = linear_activation_forward(A_prev, parameters['W'+ str(l)], 
+                                             parameters['b' + str(l)], activation = "relu")        
+        caches.append(cache)
     
     # Implement the sigmoid function for the last layer. Add "cache" to the "caches" list.
     #Your code here
+    AL, cache = linear_activation_forward(A, parameters['W' + str(L)], 
+                                          parameters['b' + str(L)], activation = "sigmoid")
+    caches.append(cache)
     
     assert(AL.shape == (1,X.shape[1]))
             
@@ -193,8 +210,11 @@ def compute_cost(AL, Y):
         
     m = Y.shape[1]
 
-    cost = #Your code here; use the formula above to calculate the cost.
-    cost = np.squeeze(cost)      #No edit needed; used to make sure to get shape right (e.g. turn [[17]] into 17)
+    cost = -(1/m)* np.sum((Y*np.log(AL))+ (1-Y)*np.log(1-AL)) 
+    #Your code here; use the formula above to calculate the cost.
+    
+    
+    cost = np.squeeze(cost)      # To make sure to get shape right (e.g. turn [[17]] into 17)
     
     return cost
 ```
@@ -240,9 +260,9 @@ def linear_backward(dZ, cache):
     A_prev, W, b = cache #Unpacking our complex object
     m = A_prev.shape[1]
 
-    dW = #Your code here; see the formulas above
-    db = #Your code here; see the formulas above
-    dA_prev = #Your code here; see the formulas above
+    dW = (1/m) * np.dot(dZ,A_prev.T) #Your code here; see the formulas above
+    db = (1/m) * np.sum(dZ, axis =1, keepdims = True) #Your code here; see the formulas above
+    dA_prev = np.dot(W.T , dZ) #Your code here; see the formulas above
     
     return dA_prev, dW, db
 ```
@@ -280,13 +300,13 @@ def linear_activation_backward(dA, cache, activation):
     Z= activation_cache
     
     if activation == "sigmoid": 
-        s = #Your code here; see the formula above
-        dZ = #Your code here; see the formula above
+        s = 1/(1+np.exp(-Z))  #Your code here; see the formula above
+        dZ = dA * s * (1-s) #Your code here; see the formula above
         dA_prev, dW, db = linear_backward(dZ, linear_cache)
         
     elif activation == "relu":
         dZ = np.array(dA, copy=True) # just converting dz to a correct object.
-        #Your code here; see the formula above to update your initialized dZ
+        dZ[Z <= 0] = 0 #Your code here; see the formula above
         dA_prev, dW, db = linear_backward(dZ, linear_cache)
     
     return dA_prev, dW, db
@@ -309,7 +329,6 @@ With that, complete the skeleton function `L_model_backward` below in order to s
 
 
 ```python
-#Complete the skeleton function below (there are 3 lines that need to be completed)
 def L_model_backward(AL, Y, caches):
     grads = {}
     L = len(caches) # the number of layers
@@ -317,18 +336,20 @@ def L_model_backward(AL, Y, caches):
     Y = Y.reshape(AL.shape) # after this line, Y is the same shape as AL
     
     # Initializing the backpropagation
-    dAL = #Your code here; see the code snippet above
+    dAL = - (np.divide(Y, AL) - np.divide(1 - Y, 1 - AL)) #Your code here; see the code snippet above
     
-    # Lth layer (SIGMOID -> LINEAR) gradients. Inputs: "dAL, current_cache". Outputs: "grads["dAL-1"], grads["dWL"], grads["dbL"]
+    # Lth layer (SIGMOID -> LINEAR) gradients. Inputs: "dAL, current_cache". 
+    # Outputs: "grads["dAL-1"], grads["dWL"], grads["dbL"]
     current_cache = caches[L-1]
-    grads["dA" + str(L-1)], grads["dW" + str(L)], grads["db" + str(L)] = #Your code here; use the helper function defined above
+    grads["dA" + str(L-1)], grads["dW" + str(L)], grads["db" + str(L)] = linear_activation_backward(dAL, current_cache, activation = "sigmoid") #Your code here; use the helper function defined above
     
     # Loop from l=L-2 to l=0
     for l in reversed(range(L-1)):
         # (RELU -> LINEAR) gradients
-        # Inputs: "grads["dA" + str(l + 1)], current_cache". Outputs: "grads["dA" + str(l)] , grads["dW" + str(l + 1)] , grads["db" + str(l + 1)] 
+        # Inputs: "grads["dA" + str(l + 1)], current_cache". 
+        # Outputs: "grads["dA" + str(l)] , grads["dW" + str(l + 1)] , grads["db" + str(l + 1)] 
         current_cache = caches[l]
-        dA_prev_temp, dW_temp, db_temp = #Your code here; use the helper function defined above
+        dA_prev_temp, dW_temp, db_temp = linear_activation_backward(grads["dA" + str(l+1)], current_cache, activation = "relu") #Your code here; use the helper function defined above
         grads["dA" + str(l)] = dA_prev_temp
         grads["dW" + str(l + 1)] = dW_temp
         grads["db" + str(l + 1)] = db_temp
@@ -351,7 +372,10 @@ def update_parameters(parameters, grads, learning_rate):
     
     L = len(parameters) // 2 # number of layers in the neural network
     
-    #Your code here
+    
+    for l in range(L):
+        parameters["W" + str(l+1)] = parameters["W" + str(l+1)] - learning_rate * grads["dW" + str(l+1)]
+        parameters["b" + str(l+1)] = parameters["b" + str(l+1)] - learning_rate * grads["db" + str(l+1)]
     return parameters
 ```
 
@@ -398,6 +422,9 @@ plt.rcParams['image.cmap'] = 'gray'
 np.random.seed(1)
 ```
 
+    Using TensorFlow backend.
+
+
 
 ```python
 # directory path
@@ -419,6 +446,10 @@ train_images, train_labels = next(train_generator)
 test_images, test_labels = next(test_generator)
 ```
 
+    Found 132 images belonging to 2 classes.
+    Found 790 images belonging to 2 classes.
+
+
 Note the drastic difference of one of these images as compared to the raw file:
 
 (Yes; it is just an incoherent blob of dots after our tremendous compression.)
@@ -429,21 +460,18 @@ print(train_images[0].shape)
 plt.imshow(train_images[0])
 ```
 
-    Clipping input data to the valid range for imshow with RGB data ([0..1] for floats or [0..255] for integers).
-
-
     (64, 64, 3)
 
 
 
 
 
-    <matplotlib.image.AxesImage at 0xb1e119f98>
+    <matplotlib.image.AxesImage at 0x10c812198>
 
 
 
 
-![png](index_files/index_32_3.png)
+![png](index_files/index_32_2.png)
 
 
 ## Data Exploration and Normalization
@@ -466,6 +494,15 @@ print ("test_images_orig shape: " + str(test_images.shape))
 print ("test_labels shape: " + str(test_labels.shape))
 ```
 
+    Number of training examples: 790
+    Number of testing examples: 132
+    Each image is of size: (64, 64, 3)
+    train_images shape: (790, 64, 64, 3)
+    train_labels shape: (790, 2)
+    test_images_orig shape: (132, 64, 64, 3)
+    test_labels shape: (132, 2)
+
+
 
 ```python
 # Reshape the training and test examples 
@@ -481,6 +518,10 @@ print ("test_img's shape: " + str(test_img.shape))
 
 ```
 
+    train_img's shape: (12288, 790)
+    test_img's shape: (12288, 132)
+
+
 Output needs to be of shape $(1, X_n)$, so we perform a little manipulation by reshaping our data.
 
 
@@ -492,6 +533,10 @@ test_labels_final = test_labels.T[[1]]
 print ("train_labels_final's shape: " + str(train_labels_final.shape))
 print ("test_labels_final's shape: " + str(test_labels_final.shape))
 ```
+
+    train_labels_final's shape: (1, 790)
+    test_labels_final's shape: (1, 132)
+
 
 We're about to run our model, and for our example, we'll define a 4 layer model. The parameter below indicate our input size of the images, the size of our hidden layers, and finally, that we are looking for a singular class output.
 
@@ -512,21 +557,22 @@ def L_layer_model(X, Y, layers_dims, learning_rate = 0.005, num_iterations = 300
     costs = []                         
     
     # Parameters initialization. (≈ 1 line of code)
-    parameters = #Your code here; use the previous helper functions
+    parameters = initialize_parameters_deep(layers_dims[0], layers_dims[1], layers_dims[2])
     
-    # Create a Loop (for gradient descent)
+    # Loop (gradient descent)
+    for i in range(0, num_iterations):
 
         # Forward propagation: [LINEAR -> RELU]*(L-1) -> LINEAR -> SIGMOID.
-        AL, caches = #Your code here; use the previous helper functions
+        AL, caches = L_model_forward(X, parameters) #Your code here; use the previous helper functions
         
         # Compute cost.
-        cost = #Your code here; use the previous helper functions
+        cost = compute_cost(AL, Y) #Your code here; use the previous helper functions
     
         # Backward propagation.
-        grads = #Your code here; use the previous helper functions
+        grads = L_model_backward(AL, Y, caches) #Your code here; use the previous helper functions
  
         # Update parameters.
-        parameters = #Your code here; use the previous helper functions
+        parameters = update_parameters(parameters, grads, learning_rate)  #Your code here; use the previous helper functions
                 
         # Print the cost every 100 training example
         if print_cost and i % 100 == 0:
@@ -550,8 +596,38 @@ Use your function to calculate parameter weights using our training set outlined
 
 
 ```python
-parameters = #Your code here; use the helper function defined above
+parameters = L_layer_model(train_img, train_labels_final, layers_dims, num_iterations = 1000, print_cost = True) 
+#Your code here; use the helper function defined above
 ```
+
+
+    ---------------------------------------------------------------------------
+
+    AssertionError                            Traceback (most recent call last)
+
+    <ipython-input-31-cdb8426a4784> in <module>()
+    ----> 1 parameters = L_layer_model(train_img, train_labels_final, layers_dims, num_iterations = 1000, print_cost = True)
+          2 #Your code here; use the helper function defined above
+
+
+    <ipython-input-30-ee09d66c7864> in L_layer_model(X, Y, layers_dims, learning_rate, num_iterations, print_cost)
+         11 
+         12         # Forward propagation: [LINEAR -> RELU]*(L-1) -> LINEAR -> SIGMOID.
+    ---> 13         AL, caches = L_model_forward(X, parameters) #Your code here; use the previous helper functions
+         14 
+         15         # Compute cost.
+
+
+    <ipython-input-6-274571a0dd9e> in L_model_forward(X, parameters)
+         20     caches.append(cache)
+         21 
+    ---> 22     assert(AL.shape == (1,X.shape[1]))
+         23 
+         24     return AL, caches
+
+
+    AssertionError: 
+
 
 ## Returning Predictions
 
